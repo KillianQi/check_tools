@@ -16,7 +16,11 @@ import {
   Tag,
   Descriptions,
   Table,
-  message
+  message,
+  Steps,
+  Badge,
+  Tooltip,
+  Popconfirm
 } from 'antd';
 import { 
   PlayCircleOutlined, 
@@ -24,11 +28,19 @@ import {
   ReloadOutlined,
   CloudServerOutlined,
   CheckCircleOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  SettingOutlined,
+  FileTextOutlined,
+  ClockCircleOutlined,
+  SafetyOutlined,
+  ThunderboltOutlined,
+  EyeOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { Panel } = Collapse;
+const { Step } = Steps;
 
 const ServerInspection = () => {
   const [form] = Form.useForm();
@@ -36,16 +48,17 @@ const ServerInspection = () => {
   const [results, setResults] = useState([]);
   const [logs, setLogs] = useState([]);
   const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
   const wsRef = useRef(null);
 
   const checkOptions = [
-    { label: '系统信息', value: 'system' },
-    { label: 'CPU信息', value: 'cpu' },
-    { label: '内存信息', value: 'memory' },
-    { label: '磁盘信息', value: 'disk' },
-    { label: '网络信息', value: 'network' },
-    { label: '进程信息', value: 'process' },
-    { label: '服务信息', value: 'service' },
+    { label: '系统信息', value: 'system', icon: <SettingOutlined /> },
+    { label: 'CPU信息', value: 'cpu', icon: <ThunderboltOutlined /> },
+    { label: '内存信息', value: 'memory', icon: <SafetyOutlined /> },
+    { label: '磁盘信息', value: 'disk', icon: <FileTextOutlined /> },
+    { label: '网络信息', value: 'network', icon: <CloudServerOutlined /> },
+    { label: '进程信息', value: 'process', icon: <EyeOutlined /> },
+    { label: '服务信息', value: 'service', icon: <ClockCircleOutlined /> },
   ];
 
   const connectWebSocket = () => {
@@ -78,9 +91,11 @@ const ServerInspection = () => {
     switch (data.type) {
       case 'inspection_start':
         addLog('info', data.message);
+        setCurrentStep(1);
         break;
       case 'server_start':
         addLog('info', `开始巡检服务器: ${data.host}`);
+        setCurrentStep(2);
         break;
       case 'server_result':
         addLog('success', `服务器 ${data.host} 巡检完成`);
@@ -94,12 +109,13 @@ const ServerInspection = () => {
         addLog('success', data.message);
         setIsInspecting(false);
         setProgress(100);
+        setCurrentStep(3);
         break;
       case 'pong':
         // 心跳响应
         break;
       default:
-        console.log('未知消息类型:', data);
+        addLog('info', data.message || '收到未知消息');
     }
   };
 
@@ -108,263 +124,267 @@ const ServerInspection = () => {
     setLogs(prev => [...prev, { type, message, timestamp }]);
   };
 
-  const startInspection = async (values) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      connectWebSocket();
-      // 等待连接建立
-      setTimeout(() => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          sendInspectionRequest(values);
-        } else {
-          message.error('WebSocket连接失败');
-        }
-      }, 1000);
-    } else {
-      sendInspectionRequest(values);
+  const handleStartInspection = async (values) => {
+    if (!values.servers || !values.servers.trim()) {
+      message.error('请输入服务器列表');
+      return;
     }
-  };
 
-  const sendInspectionRequest = (values) => {
-    const servers = values.servers.split('\n')
-      .map(line => line.trim())
-      .filter(line => line)
-      .map(line => {
-        const parts = line.split(':');
-        return {
-          host: parts[0],
-          port: parseInt(parts[1]) || 22,
-          username: parts[2] || 'root',
-          password: parts[3] || values.password,
-          key_path: parts[3]?.startsWith('/') ? parts[3] : null
-        };
-      });
+    if (!values.checks || values.checks.length === 0) {
+      message.error('请选择至少一个巡检项目');
+      return;
+    }
 
-    const request = {
-      type: 'inspect',
-      servers: servers,
-      checks: values.checks
-    };
-
-    wsRef.current.send(JSON.stringify(request));
     setIsInspecting(true);
     setProgress(0);
     setResults([]);
     setLogs([]);
-    addLog('info', `开始巡检 ${servers.length} 台服务器`);
+    setCurrentStep(0);
+
+    // 连接WebSocket
+    connectWebSocket();
+
+    try {
+      const response = await fetch('/api/inspect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          servers: values.servers,
+          checks: values.checks,
+          default_password: values.defaultPassword || '',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('巡检请求失败');
+      }
+
+      const result = await response.json();
+      message.success('巡检任务已启动');
+    } catch (error) {
+      console.error('巡检启动失败:', error);
+      message.error('巡检启动失败: ' + error.message);
+      setIsInspecting(false);
+    }
   };
 
-  const stopInspection = () => {
+  const handleStopInspection = () => {
     if (wsRef.current) {
       wsRef.current.close();
     }
     setIsInspecting(false);
     setProgress(0);
-    addLog('warning', '巡检已停止');
+    message.info('巡检已停止');
   };
 
-  const renderSystemInfo = (system) => (
-    <Descriptions column={2} size="small">
-      <Descriptions.Item label="操作系统">{system.os_name}</Descriptions.Item>
-      <Descriptions.Item label="版本">{system.os_version}</Descriptions.Item>
-      <Descriptions.Item label="内核版本">{system.kernel_version}</Descriptions.Item>
-      <Descriptions.Item label="主机名">{system.hostname}</Descriptions.Item>
-      <Descriptions.Item label="运行时间">{system.uptime}</Descriptions.Item>
-      <Descriptions.Item label="启动时间">{system.boot_time}</Descriptions.Item>
-    </Descriptions>
-  );
+  const handleClearResults = () => {
+    setResults([]);
+    setLogs([]);
+    setProgress(0);
+    setCurrentStep(0);
+    message.success('结果已清空');
+  };
 
-  const renderCPUInfo = (cpu) => (
-    <Descriptions column={2} size="small">
-      <Descriptions.Item label="CPU核心数">{cpu.cpu_count}</Descriptions.Item>
-      <Descriptions.Item label="CPU使用率">
-        <Progress percent={cpu.cpu_usage} size="small" />
-      </Descriptions.Item>
-      <Descriptions.Item label="负载平均值">
-        {cpu.load_average.join(', ')}
-      </Descriptions.Item>
-      <Descriptions.Item label="CPU型号">{cpu.cpu_model}</Descriptions.Item>
-    </Descriptions>
-  );
-
-  const renderMemoryInfo = (memory) => (
-    <Descriptions column={2} size="small">
-      <Descriptions.Item label="总内存">
-        {(memory.total / (1024**3)).toFixed(1)} GB
-      </Descriptions.Item>
-      <Descriptions.Item label="已使用">
-        {(memory.used / (1024**3)).toFixed(1)} GB ({memory.usage_percent.toFixed(1)}%)
-      </Descriptions.Item>
-      <Descriptions.Item label="可用内存">
-        {(memory.available / (1024**3)).toFixed(1)} GB
-      </Descriptions.Item>
-      <Descriptions.Item label="交换分区">
-        {(memory.swap_total / (1024**3)).toFixed(1)} GB
-      </Descriptions.Item>
-    </Descriptions>
-  );
-
-  const renderDiskInfo = (disks) => (
-    <Table
-      dataSource={disks}
-      columns={[
-        { title: '挂载点', dataIndex: 'mountpoint', key: 'mountpoint' },
-        { title: '设备', dataIndex: 'device', key: 'device' },
-        { title: '文件系统', dataIndex: 'filesystem', key: 'filesystem' },
-        { 
-          title: '使用率', 
-          dataIndex: 'usage_percent', 
-          key: 'usage_percent',
-          render: (value) => <Progress percent={value} size="small" />
-        },
-        { 
-          title: '类型', 
-          dataIndex: 'disk_type', 
-          key: 'disk_type',
-          render: (value) => <Tag color={value === 'root' ? 'red' : value === 'data' ? 'blue' : 'default'}>{value}</Tag>
-        }
-      ]}
-      pagination={false}
-      size="small"
-    />
-  );
-
-  const renderNetworkInfo = (network) => (
-    <div>
-      <h4>网络接口</h4>
-      {network.interfaces.map((iface, index) => (
-        <div key={index} className={`network-interface ${iface.status === 'UP' ? 'interface-up' : 'interface-down'}`}>
-          <div><strong>{iface.name}</strong> ({iface.interface_type})</div>
-          {iface.ip_address && <div>IP: {iface.ip_address}/{iface.netmask}</div>}
-          {iface.mac_address && <div>MAC: {iface.mac_address}</div>}
-          {iface.speed && <div>速度: {iface.speed} Mbps</div>}
-        </div>
-      ))}
-      
-      {network.bonds.length > 0 && (
-        <>
-          <h4>Bond接口</h4>
-          {network.bonds.map((bond, index) => (
-            <div key={index}>
-              <Tag color="blue">{bond.name}</Tag> 模式{bond.mode}, 状态: {bond.status}
-            </div>
-          ))}
-        </>
-      )}
-      
-      {network.vips.length > 0 && (
-        <>
-          <h4>虚拟IP</h4>
-          {network.vips.map((vip, index) => (
-            <div key={index}>
-              <Tag color="green">{vip.ip}</Tag> ({vip.type})
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  );
-
-  const renderResult = (result) => {
-    if (result.error) {
-      return <Alert message="巡检失败" description={result.error} type="error" showIcon />;
+  const getLogIcon = (type) => {
+    switch (type) {
+      case 'success':
+        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      case 'error':
+        return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+      case 'info':
+        return <ClockCircleOutlined style={{ color: '#1890ff' }} />;
+      default:
+        return <ClockCircleOutlined style={{ color: '#1890ff' }} />;
     }
+  };
 
-    return (
-      <Collapse>
-        {result.result.system && (
-          <Panel header="系统信息" key="system">
-            {renderSystemInfo(result.result.system)}
-          </Panel>
-        )}
-        {result.result.cpu && (
-          <Panel header="CPU信息" key="cpu">
-            {renderCPUInfo(result.result.cpu)}
-          </Panel>
-        )}
-        {result.result.memory && (
-          <Panel header="内存信息" key="memory">
-            {renderMemoryInfo(result.result.memory)}
-          </Panel>
-        )}
-        {result.result.disks && (
-          <Panel header="磁盘信息" key="disks">
-            {renderDiskInfo(result.result.disks)}
-          </Panel>
-        )}
-        {result.result.network && (
-          <Panel header="网络信息" key="network">
-            {renderNetworkInfo(result.result.network)}
-          </Panel>
-        )}
-      </Collapse>
-    );
+  const getLogColor = (type) => {
+    switch (type) {
+      case 'success':
+        return '#f6ffed';
+      case 'error':
+        return '#fff2f0';
+      case 'info':
+        return '#e6f7ff';
+      default:
+        return '#fafafa';
+    }
+  };
+
+  const exportResults = () => {
+    const dataStr = JSON.stringify(results, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `inspection_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    message.success('结果已导出');
   };
 
   return (
-    <div>
-      <Title level={2}>服务器巡检</Title>
-      
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title="巡检配置" extra={<CloudServerOutlined />}>
+    <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      {/* 页面标题 */}
+      <div style={{ 
+        marginBottom: '24px', 
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '24px',
+        borderRadius: '12px',
+        color: 'white',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+      }}>
+        <Title level={2} style={{ color: 'white', margin: 0 }}>
+          <CloudServerOutlined style={{ marginRight: '12px' }} />
+          服务器巡检
+        </Title>
+        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: '16px' }}>
+          批量检查服务器系统状态和资源使用情况
+        </Text>
+      </div>
+
+      {/* 巡检步骤 */}
+      <Card 
+        style={{ 
+          marginBottom: '24px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          border: 'none'
+        }}
+        bodyStyle={{ padding: '24px' }}
+      >
+        <Steps current={currentStep} size="small">
+          <Step title="配置巡检" description="设置服务器和检查项目" />
+          <Step title="开始巡检" description="启动巡检任务" />
+          <Step title="执行中" description="正在检查服务器" />
+          <Step title="完成" description="巡检任务完成" />
+        </Steps>
+      </Card>
+
+      <Row gutter={[16, 16]}>
+        {/* 左侧配置区域 */}
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span style={{ fontSize: '18px', fontWeight: '600' }}>
+                <SettingOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                巡检配置
+              </span>
+            }
+            hoverable
+            style={{ 
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              border: 'none'
+            }}
+            bodyStyle={{ padding: '24px' }}
+          >
             <Form
               form={form}
               layout="vertical"
-              onFinish={startInspection}
+              onFinish={handleStartInspection}
               initialValues={{
-                checks: ['system', 'cpu', 'memory', 'disk', 'network']
+                checks: ['system', 'cpu', 'memory', 'disk', 'network'],
               }}
             >
               <Form.Item
-                label="服务器列表"
+                label={
+                  <span style={{ fontWeight: '500' }}>
+                    <CloudServerOutlined style={{ marginRight: '8px' }} />
+                    服务器列表
+                  </span>
+                }
                 name="servers"
                 rules={[{ required: true, message: '请输入服务器列表' }]}
-                extra="格式: host:port:username:password，每行一个服务器"
               >
                 <Input.TextArea
                   rows={6}
                   placeholder="请输入服务器列表，格式：host:port:username:password 或 host:port:username:/path/to/key"
+                  style={{ borderRadius: '8px' }}
                 />
               </Form.Item>
 
               <Form.Item
-                label="默认密码"
-                name="password"
-                extra="如果服务器列表中没有指定密码，将使用此默认密码"
+                label={
+                  <span style={{ fontWeight: '500' }}>
+                    <SafetyOutlined style={{ marginRight: '8px' }} />
+                    默认密码（可选）
+                  </span>
+                }
+                name="defaultPassword"
               >
-                <Input.Password placeholder="默认SSH密码" />
+                <Input.Password 
+                  placeholder="如果服务器列表中没有指定密码，将使用此默认密码"
+                  style={{ borderRadius: '8px' }}
+                />
               </Form.Item>
 
               <Form.Item
-                label="巡检项目"
+                label={
+                  <span style={{ fontWeight: '500' }}>
+                    <FileTextOutlined style={{ marginRight: '8px' }} />
+                    巡检项目
+                  </span>
+                }
                 name="checks"
+                rules={[{ required: true, message: '请选择巡检项目' }]}
               >
-                <Checkbox.Group options={checkOptions} />
+                <Checkbox.Group style={{ width: '100%' }}>
+                  <Row gutter={[16, 8]}>
+                    {checkOptions.map(option => (
+                      <Col span={12} key={option.value}>
+                        <Checkbox value={option.value}>
+                          <Space>
+                            {option.icon}
+                            {option.label}
+                          </Space>
+                        </Checkbox>
+                      </Col>
+                    ))}
+                  </Row>
+                </Checkbox.Group>
               </Form.Item>
 
               <Form.Item>
-                <Space>
+                <Space size="middle">
                   <Button
                     type="primary"
                     icon={<PlayCircleOutlined />}
-                    loading={isInspecting}
+                    size="large"
                     htmlType="submit"
+                    loading={isInspecting}
+                    style={{ 
+                      borderRadius: '8px',
+                      height: '40px',
+                      padding: '0 24px'
+                    }}
                   >
                     开始巡检
                   </Button>
                   <Button
+                    danger
                     icon={<StopOutlined />}
-                    onClick={stopInspection}
+                    size="large"
+                    onClick={handleStopInspection}
                     disabled={!isInspecting}
+                    style={{ 
+                      borderRadius: '8px',
+                      height: '40px',
+                      padding: '0 24px'
+                    }}
                   >
                     停止巡检
                   </Button>
                   <Button
                     icon={<ReloadOutlined />}
-                    onClick={() => {
-                      setResults([]);
-                      setLogs([]);
-                      setProgress(0);
+                    size="large"
+                    onClick={handleClearResults}
+                    style={{ 
+                      borderRadius: '8px',
+                      height: '40px',
+                      padding: '0 24px'
                     }}
                   >
                     清空结果
@@ -375,57 +395,171 @@ const ServerInspection = () => {
           </Card>
         </Col>
 
-        <Col span={12}>
-          <Card title="巡检进度" extra={<CheckCircleOutlined />}>
-            <Progress percent={progress} status={isInspecting ? 'active' : 'normal'} />
-            <div style={{ marginTop: 16 }}>
-              <Text type="secondary">
-                {isInspecting ? '正在巡检中...' : '等待开始巡检'}
-              </Text>
-            </div>
-          </Card>
-
-          <Card title="巡检日志" style={{ marginTop: 16 }}>
-            <div className="log-container">
-              {logs.map((log, index) => (
-                <div key={index} className={`log-entry log-${log.type}`}>
-                  [{log.timestamp}] {log.message}
+        {/* 右侧进度和日志区域 */}
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span style={{ fontSize: '18px', fontWeight: '600' }}>
+                <ClockCircleOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                巡检进度
+              </span>
+            }
+            hoverable
+            style={{ 
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              border: 'none',
+              marginBottom: '16px'
+            }}
+            bodyStyle={{ padding: '24px' }}
+          >
+            <Progress 
+              percent={progress} 
+              status={isInspecting ? 'active' : 'normal'}
+              strokeColor={{
+                '0%': '#108ee9',
+                '100%': '#87d068',
+              }}
+              style={{ marginBottom: '16px' }}
+            />
+            <div style={{ 
+              height: '200px', 
+              overflowY: 'auto',
+              border: '1px solid #f0f0f0',
+              borderRadius: '8px',
+              padding: '12px',
+              background: '#fafafa'
+            }}>
+              {logs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#999', padding: '40px 0' }}>
+                  <ClockCircleOutlined style={{ fontSize: '24px', marginBottom: '8px' }} />
+                  <div>等待巡检开始...</div>
                 </div>
-              ))}
+              ) : (
+                logs.map((log, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '8px 12px',
+                      marginBottom: '8px',
+                      borderRadius: '6px',
+                      background: getLogColor(log.type),
+                      border: `1px solid ${getLogColor(log.type).replace('0.1', '0.2')}`,
+                    }}
+                  >
+                    <Space>
+                      {getLogIcon(log.type)}
+                      <Text style={{ fontSize: '12px', color: '#666' }}>
+                        {log.timestamp}
+                      </Text>
+                      <Text>{log.message}</Text>
+                    </Space>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
         </Col>
       </Row>
 
-      <Divider />
-
-      <Card title="巡检结果">
-        {results.map((result, index) => (
-          <Card
-            key={index}
-            type="inner"
-            title={
-              <Space>
-                <Text code>{result.host}</Text>
-                {result.error ? (
-                  <Tag color="red" icon={<CloseCircleOutlined />}>失败</Tag>
-                ) : (
-                  <Tag color="green" icon={<CheckCircleOutlined />}>成功</Tag>
-                )}
-              </Space>
-            }
-            style={{ marginBottom: 16 }}
+      {/* 巡检结果 */}
+      {results.length > 0 && (
+        <Card 
+          title={
+            <Space>
+              <span style={{ fontSize: '18px', fontWeight: '600' }}>
+                <FileTextOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                巡检结果
+              </span>
+              <Badge count={results.length} style={{ backgroundColor: '#52c41a' }} />
+            </Space>
+          }
+          extra={
+            <Button 
+              icon={<DownloadOutlined />} 
+              onClick={exportResults}
+              style={{ borderRadius: '8px' }}
+            >
+              导出结果
+            </Button>
+          }
+          hoverable
+          style={{ 
+            marginTop: '16px',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: 'none'
+          }}
+          bodyStyle={{ padding: '24px' }}
+        >
+          <Collapse 
+            ghost
+            style={{ background: 'transparent' }}
           >
-            {renderResult(result)}
-          </Card>
-        ))}
-        
-        {results.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            暂无巡检结果
-          </div>
-        )}
-      </Card>
+            {results.map((result, index) => (
+              <Panel
+                key={index}
+                header={
+                  <Space>
+                    <CloudServerOutlined />
+                    <Text strong>{result.host}</Text>
+                    {result.error ? (
+                      <Tag color="error">巡检失败</Tag>
+                    ) : (
+                      <Tag color="success">巡检成功</Tag>
+                    )}
+                  </Space>
+                }
+                style={{ 
+                  marginBottom: '8px',
+                  border: '1px solid #f0f0f0',
+                  borderRadius: '8px',
+                  background: 'white'
+                }}
+              >
+                {result.error ? (
+                  <Alert
+                    message="巡检失败"
+                    description={result.error}
+                    type="error"
+                    showIcon
+                    style={{ borderRadius: '8px' }}
+                  />
+                ) : (
+                  <Descriptions 
+                    bordered 
+                    size="small" 
+                    column={1}
+                    style={{ borderRadius: '8px' }}
+                  >
+                    {result.result && Object.entries(result.result).map(([key, value]) => (
+                      <Descriptions.Item 
+                        key={key} 
+                        label={
+                          <span style={{ fontWeight: '500', textTransform: 'capitalize' }}>
+                            {key}
+                          </span>
+                        }
+                      >
+                        <pre style={{ 
+                          margin: 0, 
+                          whiteSpace: 'pre-wrap',
+                          fontSize: '12px',
+                          background: '#f5f5f5',
+                          padding: '8px',
+                          borderRadius: '4px'
+                        }}>
+                          {JSON.stringify(value, null, 2)}
+                        </pre>
+                      </Descriptions.Item>
+                    ))}
+                  </Descriptions>
+                )}
+              </Panel>
+            ))}
+          </Collapse>
+        </Card>
+      )}
     </div>
   );
 };

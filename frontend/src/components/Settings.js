@@ -1,181 +1,572 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, Button, Switch, InputNumber, Space, Typography, Divider, Alert } from 'antd';
-import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  Card,
+  Form,
+  Input,
+  Button,
+  Switch,
+  InputNumber,
+  Select,
+  Typography,
+  Divider,
+  Row,
+  Col,
+  Space,
+  Alert,
+  message,
+  Tabs,
+  Tag
+} from 'antd';
+import {
+  SettingOutlined,
+  SaveOutlined,
+  ReloadOutlined,
+  SecurityScanOutlined,
+  ClockCircleOutlined,
+  GlobalOutlined,
+  FileTextOutlined,
+  KeyOutlined,
+  GlobalOutlined as GlobalIcon,
+  ToolOutlined
+} from '@ant-design/icons';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
+const { Option } = Select;
 
 const Settings = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
-  const onFinish = (values) => {
+  const handleSave = async (values) => {
     setLoading(true);
-    // 模拟保存设置
-    setTimeout(() => {
-      console.log('保存设置:', values);
+    try {
+      // 模拟保存设置
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      message.success('设置已保存');
+    } catch (error) {
+      message.error('保存失败');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const resetSettings = () => {
+  const handleReset = () => {
     form.resetFields();
+    message.info('设置已重置');
   };
 
-  return (
-    <div>
-      <Title level={2}>设置</Title>
-      
-      <Alert
-        message="设置说明"
-        description="这些设置将影响巡检工具的行为。修改后需要重启服务才能生效。"
-        type="info"
-        showIcon
-        style={{ marginBottom: 24 }}
-      />
-
-      <Card title="连接设置">
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={onFinish}
-          initialValues={{
-            ssh_timeout: 30,
-            command_timeout: 10,
-            max_concurrent: 5,
-            enable_retry: true,
-            retry_count: 3,
-            retry_delay: 5
-          }}
-        >
+  const connectionTab = (
+    <Form
+      form={form}
+      layout="vertical"
+      onFinish={handleSave}
+      initialValues={{
+        sshTimeout: 30,
+        commandTimeout: 60,
+        maxConcurrency: 5,
+        retryCount: 3,
+        retryDelay: 5,
+        keepAlive: true,
+        compression: true,
+      }}
+    >
+      <Row gutter={[24, 16]}>
+        <Col xs={24} md={12}>
           <Form.Item
-            label="SSH连接超时时间"
-            name="ssh_timeout"
-            extra="SSH连接的最大等待时间（秒）"
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <ClockCircleOutlined style={{ marginRight: '8px' }} />
+                SSH连接超时（秒）
+              </span>
+            }
+            name="sshTimeout"
+            rules={[{ required: true, message: '请输入SSH连接超时时间' }]}
           >
-            <InputNumber min={5} max={300} />
+            <InputNumber
+              min={5}
+              max={300}
+              style={{ width: '100%' }}
+              placeholder="30"
+            />
           </Form.Item>
-
+        </Col>
+        <Col xs={24} md={12}>
           <Form.Item
-            label="命令执行超时时间"
-            name="command_timeout"
-            extra="单个命令执行的最大等待时间（秒）"
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <ClockCircleOutlined style={{ marginRight: '8px' }} />
+                命令执行超时（秒）
+              </span>
+            }
+            name="commandTimeout"
+            rules={[{ required: true, message: '请输入命令执行超时时间' }]}
           >
-            <InputNumber min={1} max={60} />
+            <InputNumber
+              min={10}
+              max={600}
+              style={{ width: '100%' }}
+              placeholder="60"
+            />
           </Form.Item>
-
+        </Col>
+        <Col xs={24} md={12}>
           <Form.Item
-            label="最大并发连接数"
-            name="max_concurrent"
-            extra="同时巡检的最大服务器数量"
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <GlobalOutlined style={{ marginRight: '8px' }} />
+                最大并发数
+              </span>
+            }
+            name="maxConcurrency"
+            rules={[{ required: true, message: '请输入最大并发数' }]}
           >
-            <InputNumber min={1} max={20} />
+            <InputNumber
+              min={1}
+              max={20}
+              style={{ width: '100%' }}
+              placeholder="5"
+            />
           </Form.Item>
-
-          <Divider />
-
+        </Col>
+        <Col xs={24} md={12}>
           <Form.Item
-            label="启用重试机制"
-            name="enable_retry"
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <ReloadOutlined style={{ marginRight: '8px' }} />
+                重试次数
+              </span>
+            }
+            name="retryCount"
+            rules={[{ required: true, message: '请输入重试次数' }]}
+          >
+            <InputNumber
+              min={0}
+              max={10}
+              style={{ width: '100%' }}
+              placeholder="3"
+            />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={12}>
+          <Form.Item
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <ClockCircleOutlined style={{ marginRight: '8px' }} />
+                重试延迟（秒）
+              </span>
+            }
+            name="retryDelay"
+            rules={[{ required: true, message: '请输入重试延迟时间' }]}
+          >
+            <InputNumber
+              min={1}
+              max={60}
+              style={{ width: '100%' }}
+              placeholder="5"
+            />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={12}>
+          <Form.Item
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <GlobalOutlined style={{ marginRight: '8px' }} />
+                连接保持
+              </span>
+            }
+            name="keepAlive"
             valuePropName="checked"
-            extra="连接失败时是否自动重试"
           >
             <Switch />
           </Form.Item>
-
+        </Col>
+        <Col xs={24} md={12}>
           <Form.Item
-            label="重试次数"
-            name="retry_count"
-            extra="连接失败时的最大重试次数"
+            label={
+              <span style={{ fontWeight: '500' }}>
+                <GlobalOutlined style={{ marginRight: '8px' }} />
+                启用压缩
+              </span>
+            }
+            name="compression"
+            valuePropName="checked"
           >
-            <InputNumber min={1} max={10} />
+            <Switch />
           </Form.Item>
+        </Col>
+      </Row>
+    </Form>
+  );
 
-          <Form.Item
-            label="重试间隔"
-            name="retry_delay"
-            extra="重试之间的等待时间（秒）"
-          >
-            <InputNumber min={1} max={60} />
-          </Form.Item>
+  const securityTab = (
+    <>
+      <Alert
+        message="安全配置"
+        description="配置SSH连接的安全选项和认证方式"
+        type="info"
+        showIcon
+        style={{ marginBottom: '24px', borderRadius: '8px' }}
+      />
 
-          <Divider />
-
-          <Form.Item
-            label="日志级别"
-            name="log_level"
-            extra="日志记录的详细程度"
-          >
-            <Input.Group compact>
-              <Button.Group>
-                <Button>DEBUG</Button>
-                <Button type="primary">INFO</Button>
-                <Button>WARNING</Button>
-                <Button>ERROR</Button>
-              </Button.Group>
-            </Input.Group>
-          </Form.Item>
-
-          <Form.Item
-            label="日志文件路径"
-            name="log_file"
-            extra="日志文件的保存路径"
-          >
-            <Input placeholder="/var/log/server-inspector.log" />
-          </Form.Item>
-
-          <Form.Item>
-            <Space>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                loading={loading}
-                htmlType="submit"
+      <Form layout="vertical">
+        <Row gutter={[24, 16]}>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <KeyOutlined style={{ marginRight: '8px' }} />
+                  默认SSH密钥路径
+                </span>
+              }
+            >
+              <Input
+                placeholder="/home/user/.ssh/id_rsa"
+                style={{ borderRadius: '8px' }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <SecurityScanOutlined style={{ marginRight: '8px' }} />
+                  SSH算法优先级
+                </span>
+              }
+            >
+              <Select
+                placeholder="选择SSH算法"
+                style={{ borderRadius: '8px' }}
+                defaultValue="default"
               >
-                保存设置
-              </Button>
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={resetSettings}
+                <Option value="default">默认（推荐）</Option>
+                <Option value="modern">现代算法</Option>
+                <Option value="legacy">传统算法</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <SecurityScanOutlined style={{ marginRight: '8px' }} />
+                  禁用已知主机检查
+                </span>
+              }
+            >
+              <Switch />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <SecurityScanOutlined style={{ marginRight: '8px' }} />
+                  启用严格主机检查
+                </span>
+              }
+            >
+              <Switch defaultChecked />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </>
+  );
+
+  const loggingTab = (
+    <>
+      <Alert
+        message="日志配置"
+        description="配置系统日志记录和输出选项"
+        type="info"
+        showIcon
+        style={{ marginBottom: '24px', borderRadius: '8px' }}
+      />
+
+      <Form layout="vertical">
+        <Row gutter={[24, 16]}>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <FileTextOutlined style={{ marginRight: '8px' }} />
+                  日志级别
+                </span>
+              }
+            >
+              <Select
+                placeholder="选择日志级别"
+                style={{ borderRadius: '8px' }}
+                defaultValue="info"
               >
-                重置设置
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Card>
+                <Option value="debug">调试</Option>
+                <Option value="info">信息</Option>
+                <Option value="warning">警告</Option>
+                <Option value="error">错误</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <FileTextOutlined style={{ marginRight: '8px' }} />
+                  日志文件路径
+                </span>
+              }
+            >
+              <Input
+                placeholder="/var/log/server-inspector.log"
+                style={{ borderRadius: '8px' }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <FileTextOutlined style={{ marginRight: '8px' }} />
+                  启用文件日志
+                </span>
+              }
+            >
+              <Switch defaultChecked />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <FileTextOutlined style={{ marginRight: '8px' }} />
+                  启用控制台日志
+                </span>
+              }
+            >
+              <Switch defaultChecked />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <FileTextOutlined style={{ marginRight: '8px' }} />
+                  日志轮转大小（MB）
+                </span>
+              }
+            >
+              <InputNumber
+                min={1}
+                max={1000}
+                style={{ width: '100%' }}
+                placeholder="100"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <FileTextOutlined style={{ marginRight: '8px' }} />
+                  保留日志文件数
+                </span>
+              }
+            >
+              <InputNumber
+                min={1}
+                max={50}
+                style={{ width: '100%' }}
+                placeholder="10"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </>
+  );
 
-      <Card title="高级设置" style={{ marginTop: 16 }}>
-        <Form layout="vertical">
-          <Form.Item
-            label="自定义SSH选项"
-            name="ssh_options"
-            extra="额外的SSH连接选项（JSON格式）"
-          >
-            <Input.TextArea
-              rows={4}
-              placeholder='{"compression": true, "keepalive": 60}'
-            />
-          </Form.Item>
+  const advancedTab = (
+    <>
+      <Alert
+        message="高级配置"
+        description="配置高级选项和自定义参数"
+        type="info"
+        showIcon
+        style={{ marginBottom: '24px', borderRadius: '8px' }}
+      />
 
-          <Form.Item
-            label="代理设置"
-            name="proxy"
-            extra="HTTP代理服务器地址（可选）"
-          >
-            <Input placeholder="http://proxy.example.com:8080" />
-          </Form.Item>
+      <Form layout="vertical">
+        <Row gutter={[24, 16]}>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <GlobalOutlined style={{ marginRight: '8px' }} />
+                  代理服务器
+                </span>
+              }
+            >
+              <Input
+                placeholder="http://proxy.example.com:8080"
+                style={{ borderRadius: '8px' }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <ToolOutlined style={{ marginRight: '8px' }} />
+                  自定义SSH选项
+                </span>
+              }
+            >
+              <Input.TextArea
+                rows={3}
+                placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                style={{ borderRadius: '8px' }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <ToolOutlined style={{ marginRight: '8px' }} />
+                  自定义命令前缀
+                </span>
+              }
+            >
+              <Input
+                placeholder="sudo"
+                style={{ borderRadius: '8px' }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              label={
+                <span style={{ fontWeight: '500' }}>
+                  <ToolOutlined style={{ marginRight: '8px' }} />
+                  启用调试模式
+                </span>
+              }
+            >
+              <Switch />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </>
+  );
 
-          <Form.Item
-            label="自定义命令"
-            name="custom_commands"
-            extra="巡检时执行的自定义命令（每行一个）"
-          >
-            <Input.TextArea
-              rows={4}
-              placeholder="echo 'Custom check'&#10;ps aux | grep important_process"
-            />
-          </Form.Item>
-        </Form>
+  const items = [
+    {
+      key: 'connection',
+      label: (
+        <span>
+          <GlobalOutlined />
+          连接设置
+        </span>
+      ),
+      children: connectionTab,
+    },
+    {
+      key: 'security',
+      label: (
+        <span>
+          <SecurityScanOutlined />
+          安全设置
+        </span>
+      ),
+      children: securityTab,
+    },
+    {
+      key: 'logging',
+      label: (
+        <span>
+          <FileTextOutlined />
+          日志设置
+        </span>
+      ),
+      children: loggingTab,
+    },
+    {
+      key: 'advanced',
+      label: (
+        <span>
+          <ToolOutlined />
+          高级设置
+        </span>
+      ),
+      children: advancedTab,
+    },
+  ];
+
+  return (
+    <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      {/* 页面标题 */}
+      <div style={{
+        marginBottom: '24px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '24px',
+        borderRadius: '12px',
+        color: 'white',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+      }}>
+        <Title level={2} style={{ color: 'white', margin: 0 }}>
+          <SettingOutlined style={{ marginRight: '12px' }} />
+          系统设置
+        </Title>
+        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: '16px' }}>
+          配置服务器巡检工具的各项参数和选项
+        </Text>
+      </div>
+
+      <Card
+        hoverable
+        style={{
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          border: 'none'
+        }}
+        bodyStyle={{ padding: '24px' }}
+      >
+        <Tabs defaultActiveKey="connection" size="large" items={items} />
+
+        <Divider />
+
+        {/* 操作按钮 */}
+        <div style={{ textAlign: 'center' }}>
+          <Space size="large">
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              size="large"
+              loading={loading}
+              onClick={() => form.submit()}
+              style={{
+                borderRadius: '8px',
+                height: '40px',
+                padding: '0 32px'
+              }}
+            >
+              保存设置
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              size="large"
+              onClick={handleReset}
+              style={{
+                borderRadius: '8px',
+                height: '40px',
+                padding: '0 32px'
+              }}
+            >
+              重置设置
+            </Button>
+          </Space>
+        </div>
       </Card>
     </div>
   );
