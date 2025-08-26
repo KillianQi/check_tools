@@ -164,7 +164,10 @@ class ServerInspector:
         load_average = [float(x) for x in load_avg.split()[:3]]
         
         # CPU型号
-        cpu_model = await self._execute_command(ssh_client, "cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d':' -f2").strip()
+        cpu_model = (await self._execute_command(
+            ssh_client,
+            "cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d':' -f2"
+        )).strip()
         
         return CPUInfo(
             cpu_count=cpu_count,
@@ -218,12 +221,19 @@ class ServerInspector:
                     device = parts[0]
                     mountpoint = parts[5]
                     
-                    # 跳过特殊文件系统
-                    if mountpoint in ['/dev', '/proc', '/sys', '/run']:
+                    # 跳过特殊/临时/系统挂载点
+                    skip_mountpoints = set([
+                        '/dev', '/proc', '/sys', '/run', '/dev/shm', '/sys/fs/cgroup', '/var/run', '/tmp'
+                    ])
+                    if mountpoint in skip_mountpoints or mountpoint.startswith('/run/') or mountpoint.startswith('/run/user/'):
                         continue
                     
                     # 获取文件系统类型
                     fs_type = await self._execute_command(ssh_client, f"df -T {mountpoint} | tail -1 | awk '{{print $2}}'")
+
+                    # 过滤 tmpfs/devtmpfs 等临时文件系统
+                    if fs_type in ['tmpfs', 'devtmpfs', 'overlay', 'squashfs']:
+                        continue
                     
                     # 解析大小信息
                     total_str = parts[1]
@@ -236,8 +246,17 @@ class ServerInspector:
                     used = self._parse_size(used_str)
                     free = self._parse_size(available_str)
                     
-                    # 判断磁盘类型
-                    disk_type = "root" if mountpoint == "/" else "data" if "/data" in mountpoint or "/storage" in mountpoint else "other"
+                    # 判断磁盘类型，仅保留根盘和常见数据盘挂载
+                    if mountpoint == "/":
+                        disk_type = "root"
+                    elif mountpoint.startswith('/data') or mountpoint.startswith('/storage'):
+                        disk_type = "data"
+                    else:
+                        disk_type = "other"
+
+                    # 仅保留 root/data
+                    if disk_type not in ["root", "data"]:
+                        continue
                     
                     disks.append(DiskInfo(
                         device=device,
@@ -274,57 +293,61 @@ class ServerInspector:
         
         # 获取网络接口信息
         ip_output = await self._execute_command(ssh_client, "ip addr show")
-        interface_blocks = ip_output.split('\n\n')
-        
-        for block in interface_blocks:
-            if not block.strip():
-                continue
-                
-            lines = block.strip().split('\n')
-            if len(lines) < 2:
-                continue
-            
-            # 解析接口名称
-            interface_name = lines[0].split(':')[1].strip()
-            
-            # 跳过lo接口
+        lines = [l.rstrip() for l in ip_output.split('\n')]
+
+        current_header = None
+        current_block_lines = []
+
+        async def flush_block():
+            nonlocal current_header, current_block_lines
+            if not current_header:
+                return
+            header = current_header
+            lines_block = current_block_lines
+
+            # 解析接口名称与状态
+            try:
+                header_parts = header.split(':', 2)
+                interface_name = header_parts[1].strip()
+            except Exception:
+                interface_name = header.split()[1].rstrip(':') if len(header.split()) > 1 else 'unknown'
+
             if interface_name == 'lo':
-                continue
-            
-            # 解析IP地址
+                current_header = None
+                current_block_lines = []
+                return
+
             ip_address = ""
             netmask = ""
             mac_address = ""
-            status = "DOWN"
-            
-            for line in lines[1:]:
-                line = line.strip()
-                if line.startswith('link/ether'):
-                    mac_address = line.split()[1]
-                elif line.startswith('inet '):
-                    ip_info = line.split()[1]
-                    ip_address = ip_info.split('/')[0]
-                    netmask = ip_info.split('/')[1]
-                elif line.startswith('state UP'):
-                    status = "UP"
-            
-            # 判断接口类型
+            status = "UP" if (' state UP ' in header or header.strip().endswith('state UP')) else "DOWN"
+
+            for line in lines_block:
+                s = line.strip()
+                if s.startswith('link/ether'):
+                    parts = s.split()
+                    if len(parts) >= 2:
+                        mac_address = parts[1]
+                elif s.startswith('inet '):
+                    ip_info = s.split()[1]
+                    if '/' in ip_info:
+                        ip_address, netmask = ip_info.split('/', 1)
+
             interface_type = "physical"
             if interface_name.startswith('bond'):
                 interface_type = "bond"
             elif interface_name.startswith('veth') or interface_name.startswith('docker'):
                 interface_type = "virtual"
-            
-            # 获取接口速度
+
             speed = None
             try:
                 speed_cmd = f"cat /sys/class/net/{interface_name}/speed 2>/dev/null || echo 'Unknown'"
-                speed = await self._execute_command(ssh_client, speed_cmd)
-                if speed == "Unknown":
-                    speed = None
+                speed_val = await self._execute_command(ssh_client, speed_cmd)
+                if speed_val and speed_val != "Unknown":
+                    speed = speed_val
             except:
                 pass
-            
+
             interfaces.append(NetworkInterface(
                 name=interface_name,
                 ip_address=ip_address,
@@ -334,6 +357,29 @@ class ServerInspector:
                 status=status,
                 speed=speed
             ))
+
+            current_header = None
+            current_block_lines = []
+
+        for line in lines:
+            if not line:
+                # 空行结束当前块
+                if current_header is not None:
+                    await flush_block()
+                continue
+            if line[0].isdigit() and ':' in line.split(' ', 1)[0]:
+                # 新的接口头部
+                if current_header is not None:
+                    await flush_block()
+                current_header = line
+                current_block_lines = []
+            else:
+                if current_header is not None:
+                    current_block_lines.append(line)
+
+        # 文件结束后冲刷最后一个块
+        if current_header is not None:
+            await flush_block()
         
         # 获取bond信息
         try:
