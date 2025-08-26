@@ -1,0 +1,124 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f5f5;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+
+.site-layout-content {
+  background: #fff;
+  padding: 24px;
+  min-height: 280px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.server-card {
+  margin-bottom: 16px;
+}
+
+.server-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-success {
+  background-color: #52c41a;
+}
+
+.status-error {
+  background-color: #ff4d4f;
+}
+
+.status-warning {
+  background-color: #faad14;
+}
+
+.status-processing {
+  background-color: #1890ff;
+}
+
+.metric-card {
+  text-align: center;
+  padding: 16px;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.metric-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.network-interface {
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+}
+
+.interface-up {
+  border-color: #52c41a;
+  background-color: #f6ffed;
+}
+
+.interface-down {
+  border-color: #ff4d4f;
+  background-color: #fff2f0;
+}
+
+.log-container {
+  background-color: #f5f5f5;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.log-entry {
+  margin-bottom: 4px;
+  padding: 2px 0;
+}
+
+.log-info {
+  color: #1890ff;
+}
+
+.log-success {
+  color: #52c41a;
+}
+
+.log-error {
+  color: #ff4d4f;
+}
+
+.log-warning {
+  color: #faad14;
+}

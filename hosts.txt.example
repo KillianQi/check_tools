@@ -1,0 +1,16 @@
+# 服务器批量巡检工具 - 主机配置文件示例
+# 格式: host:port:username:password_or_key_path
+# 注释行以#开头
+
+# 使用密码认证的服务器
+192.168.1.100:22:root:password123
+192.168.1.101:22:admin:admin123
+192.168.1.102:2222:root:my_password
+
+# 使用SSH密钥认证的服务器
+192.168.1.103:22:root:/path/to/private_key
+192.168.1.104:22:ubuntu:/home/user/.ssh/id_rsa
+
+# 不同端口的服务器
+10.0.0.1:2222:root:password
+10.0.0.2:22:admin:/etc/ssh/private_key
